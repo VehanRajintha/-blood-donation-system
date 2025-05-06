@@ -1,5 +1,9 @@
 # 🩸 Blood Donation Management System
 
+![pic1](pic.png)
+
+![pic2](pic.png)
+
 ## 🌟 Overview
 A comprehensive Java desktop application for managing blood donation operations. This system streamlines the process of blood donation management, making it easier for both donors and administrators to contribute to saving lives.
 
