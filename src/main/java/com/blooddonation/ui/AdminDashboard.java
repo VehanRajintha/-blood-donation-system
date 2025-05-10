@@ -22,6 +22,15 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import java.util.Calendar;
 import javax.swing.SpinnerNumberModel;
+import com.blooddonation.dao.DonorDAO;
+import com.blooddonation.dao.DonorDAOImpl;
+import com.blooddonation.model.Donor;
+import com.blooddonation.dao.RequestDAO;
+import com.blooddonation.dao.RequestDAOImpl;
+import com.blooddonation.model.Request;
+import com.blooddonation.dao.AppointmentDAO;
+import com.blooddonation.dao.AppointmentDAOImpl;
+import com.blooddonation.model.Appointment;
 
 public class AdminDashboard extends JFrame {
     private JPanel mainPanel;
@@ -40,6 +49,9 @@ public class AdminDashboard extends JFrame {
     private DefaultTableModel appointmentTableModel;
     private JTable appointmentTable;
     private String currentPage = "Dashboard";
+    private DonorDAO donorDAO;
+    private RequestDAO requestDAO = new RequestDAOImpl();
+    private AppointmentDAO appointmentDAO = new AppointmentDAOImpl();
 
     public AdminDashboard() {
         setTitle("Blood Donation System - Admin Dashboard");
@@ -66,6 +78,8 @@ public class AdminDashboard extends JFrame {
 
         // Start menu animation
         startMenuAnimation();
+
+        donorDAO = new DonorDAOImpl(); // Demonstrates abstraction/polymorphism
     }
 
     private void setupMenuPanel() {
@@ -475,62 +489,24 @@ public class AdminDashboard extends JFrame {
 
     private void loadDonorData() {
         donorTableModel.setRowCount(0);
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT donor_id, first_name, last_name, blood_type, phone, last_donation_date, is_eligible " +
-                     "FROM donors ORDER BY donor_id DESC")) {
-            
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                donorTableModel.addRow(new Object[]{
-                    rs.getInt("donor_id"),
-                    rs.getString("first_name") + " " + rs.getString("last_name"),
-                    rs.getString("blood_type"),
-                    rs.getString("phone"),
-                    rs.getDate("last_donation_date"),
-                    rs.getBoolean("is_eligible") ? "Eligible" : "Not Eligible"
-                });
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error loading donor data: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+        java.util.List<Donor> donors = donorDAO.getAllDonors();
+        for (Donor d : donors) {
+            donorTableModel.addRow(new Object[]{
+                d.getDonorId(),
+                d.getFirstName() + " " + d.getLastName(),
+                d.getBloodType(),
+                d.getPhone(),
+                d.getLastDonationDate(),
+                d.isEligible() ? "Eligible" : "Not Eligible"
+            });
         }
     }
 
-    private Vector<Object> getDonorData(int donorId) {
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT * FROM donors WHERE donor_id = ?")) {
-            
-            stmt.setInt(1, donorId);
-            ResultSet rs = stmt.executeQuery();
-            
-            if (rs.next()) {
-                Vector<Object> donorData = new Vector<>();
-                donorData.add(rs.getInt("donor_id"));
-                donorData.add(rs.getString("first_name"));
-                donorData.add(rs.getString("last_name"));
-                donorData.add(rs.getString("blood_type"));
-                donorData.add(rs.getString("gender"));
-                donorData.add(rs.getString("phone"));
-                donorData.add(rs.getString("email"));
-                donorData.add(rs.getString("address"));
-                donorData.add(rs.getDate("date_of_birth"));
-                donorData.add(rs.getDate("last_donation_date"));
-                donorData.add(rs.getBoolean("is_eligible"));
-                donorData.add(rs.getString("medical_conditions"));
-                return donorData;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error retrieving donor data: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
-        }
-        return null;
+    private Donor getDonorData(int donorId) {
+        return donorDAO.getDonor(donorId);
     }
 
-    private void showDonorDialog(Vector<Object> donorData) {
+    private void showDonorDialog(Donor donorData) {
         JDialog dialog = new JDialog(this, donorData == null ? "Add New Donor" : "Edit Donor", true);
         dialog.setLayout(new BorderLayout(10, 10));
         dialog.setSize(500, 600);
@@ -613,19 +589,19 @@ public class AdminDashboard extends JFrame {
 
         // If editing, populate fields with existing data
         if (donorData != null) {
-            firstNameField.setText(donorData.get(1).toString());
-            lastNameField.setText(donorData.get(2).toString());
-            bloodTypeCombo.setSelectedItem(donorData.get(3));
-            genderCombo.setSelectedItem(donorData.get(4));
-            phoneField.setText(donorData.get(5).toString());
-            emailField.setText(donorData.get(6) != null ? donorData.get(6).toString() : "");
-            addressArea.setText(donorData.get(7).toString());
-            dobChooser.setDate((Date) donorData.get(8));
-            if (donorData.get(9) != null) {
-                lastDonationChooser.setDate((Date) donorData.get(9));
+            firstNameField.setText(donorData.getFirstName());
+            lastNameField.setText(donorData.getLastName());
+            bloodTypeCombo.setSelectedItem(donorData.getBloodType());
+            genderCombo.setSelectedItem(donorData.getGender());
+            phoneField.setText(donorData.getPhone());
+            emailField.setText(donorData.getEmail());
+            addressArea.setText(donorData.getAddress());
+            dobChooser.setDate(donorData.getDateOfBirth());
+            if (donorData.getLastDonationDate() != null) {
+                lastDonationChooser.setDate(donorData.getLastDonationDate());
             }
-            eligibleCheck.setSelected((Boolean) donorData.get(10));
-            medicalConditionsArea.setText(donorData.get(11) != null ? donorData.get(11).toString() : "");
+            eligibleCheck.setSelected(donorData.isEligible());
+            medicalConditionsArea.setText(donorData.getMedicalConditions());
         }
 
         // Buttons
@@ -638,7 +614,7 @@ public class AdminDashboard extends JFrame {
 
         saveButton.addActionListener(e -> {
             if (validateForm(firstNameField, lastNameField, phoneField)) {
-                saveDonor(donorData != null ? (Integer) donorData.get(0) : null,
+                saveDonor(donorData != null ? donorData.getDonorId() : null,
                          firstNameField.getText(),
                          lastNameField.getText(),
                          bloodTypeCombo.getSelectedItem().toString(),
@@ -684,41 +660,30 @@ public class AdminDashboard extends JFrame {
     private void saveDonor(Integer donorId, String firstName, String lastName, String bloodType,
                           String gender, String phone, String email, String address,
                           Date dob, Date lastDonation, boolean isEligible, String medicalConditions) {
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            String sql;
-            if (donorId == null) {
-                sql = "INSERT INTO donors (first_name, last_name, blood_type, gender, phone, email, " +
-                      "address, date_of_birth, last_donation_date, is_eligible, medical_conditions) " +
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            } else {
-                sql = "UPDATE donors SET first_name=?, last_name=?, blood_type=?, gender=?, phone=?, " +
-                      "email=?, address=?, date_of_birth=?, last_donation_date=?, is_eligible=?, " +
-                      "medical_conditions=? WHERE donor_id=?";
-            }
-
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            stmt.setString(1, firstName);
-            stmt.setString(2, lastName);
-            stmt.setString(3, bloodType);
-            stmt.setString(4, gender);
-            stmt.setString(5, phone);
-            stmt.setString(6, email);
-            stmt.setString(7, address);
-            stmt.setDate(8, new java.sql.Date(dob.getTime()));
-            stmt.setDate(9, lastDonation != null ? new java.sql.Date(lastDonation.getTime()) : null);
-            stmt.setBoolean(10, isEligible);
-            stmt.setString(11, medicalConditions);
-
-            if (donorId != null) {
-                stmt.setInt(12, donorId);
-            }
-
-            stmt.executeUpdate();
+        Donor donor = new Donor(
+            donorId != null ? donorId : 0,
+            firstName,
+            lastName,
+            bloodType,
+            gender,
+            phone,
+            email,
+            address,
+            dob,
+            lastDonation,
+            isEligible,
+            medicalConditions
+        );
+        boolean success;
+        if (donorId == null) {
+            success = donorDAO.addDonor(donor) > 0;
+        } else {
+            success = donorDAO.updateDonor(donor);
+        }
+        if (success) {
             JOptionPane.showMessageDialog(this, "Donor saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-        } catch (Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error saving donor: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this, "Error saving donor.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -730,19 +695,12 @@ public class AdminDashboard extends JFrame {
                 JOptionPane.WARNING_MESSAGE);
 
         if (confirm == JOptionPane.YES_OPTION) {
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM donors WHERE donor_id = ?")) {
-                
-                stmt.setInt(1, donorId);
-                stmt.executeUpdate();
-                
-                JOptionPane.showMessageDialog(this, "Donor deleted successfully!",
-                        "Success", JOptionPane.INFORMATION_MESSAGE);
+            boolean success = donorDAO.deleteDonor(donorId);
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Donor deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                 loadDonorData();
-            } catch (Exception e) {
-                e.printStackTrace();
-                JOptionPane.showMessageDialog(this, "Error deleting donor: " + e.getMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "Error deleting donor.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -846,8 +804,7 @@ public class AdminDashboard extends JFrame {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error loading inventory data: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error loading inventory data: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -871,8 +828,7 @@ public class AdminDashboard extends JFrame {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error retrieving inventory data: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error retrieving inventory data: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
         return null;
     }
@@ -972,18 +928,15 @@ public class AdminDashboard extends JFrame {
 
     private boolean validateInventoryForm(JDateChooser collectionDateChooser, JDateChooser expiryDateChooser) {
         if (collectionDateChooser.getDate() == null) {
-            JOptionPane.showMessageDialog(this, "Collection date is required", 
-                "Validation Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Collection date is required", "Validation Error", JOptionPane.ERROR_MESSAGE);
             return false;
         }
         if (expiryDateChooser.getDate() == null) {
-            JOptionPane.showMessageDialog(this, "Expiry date is required", 
-                "Validation Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Expiry date is required", "Validation Error", JOptionPane.ERROR_MESSAGE);
             return false;
         }
         if (expiryDateChooser.getDate().before(collectionDateChooser.getDate())) {
-            JOptionPane.showMessageDialog(this, "Expiry date must be after collection date", 
-                "Validation Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Expiry date must be after collection date", "Validation Error", JOptionPane.ERROR_MESSAGE);
             return false;
         }
         return true;
@@ -1013,12 +966,10 @@ public class AdminDashboard extends JFrame {
             }
 
             stmt.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Blood inventory saved successfully!", 
-                "Success", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Blood inventory saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error saving inventory: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error saving inventory: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1036,13 +987,11 @@ public class AdminDashboard extends JFrame {
                 stmt.setInt(1, inventoryId);
                 stmt.executeUpdate();
                 
-                JOptionPane.showMessageDialog(this, "Blood stock removed successfully!",
-                        "Success", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Blood stock removed successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                 loadInventoryData();
             } catch (Exception e) {
                 e.printStackTrace();
-                JOptionPane.showMessageDialog(this, "Error removing blood stock: " + e.getMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Error removing blood stock: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -1076,101 +1025,60 @@ public class AdminDashboard extends JFrame {
 
         // Buttons panel
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton approveButton = new JButton("Approve");
-        JButton rejectButton = new JButton("Reject");
-        JButton completeButton = new JButton("Mark Complete");
-
-        // Style buttons
-        approveButton.setBackground(new Color(40, 167, 69)); // Green
-        rejectButton.setBackground(new Color(220, 53, 69));  // Red
-        completeButton.setBackground(new Color(0, 123, 255)); // Blue
-
-        approveButton.setForeground(Color.WHITE);
-        rejectButton.setForeground(Color.WHITE);
-        completeButton.setForeground(Color.WHITE);
-
-        approveButton.setFocusPainted(false);
-        rejectButton.setFocusPainted(false);
-        completeButton.setFocusPainted(false);
-
-        // Initially disable all buttons
-        approveButton.setEnabled(false);
-        rejectButton.setEnabled(false);
-        completeButton.setEnabled(false);
-
-        // Add table row selection listener
-        requestTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                int selectedRow = requestTable.getSelectedRow();
-                if (selectedRow != -1) {
-                    String status = (String) requestTable.getValueAt(selectedRow, 6);
-                    approveButton.setEnabled(status.equals("PENDING"));
-                    rejectButton.setEnabled(status.equals("PENDING"));
-                    completeButton.setEnabled(status.equals("APPROVED"));
-                }
-            }
-        });
-
-        // Approve button action
-        approveButton.addActionListener(e -> {
-            int selectedRow = requestTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int requestId = (int) requestTable.getValueAt(selectedRow, 0);
-                String bloodType = (String) requestTable.getValueAt(selectedRow, 2);
-                int unitsNeeded = (int) requestTable.getValueAt(selectedRow, 3);
-                approveRequest(requestId, bloodType, unitsNeeded);
-            }
-        });
-
-        // Reject button action
-        rejectButton.addActionListener(e -> {
-            int selectedRow = requestTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int requestId = (int) requestTable.getValueAt(selectedRow, 0);
-                rejectRequest(requestId);
-            }
-        });
-
-        // Complete button action
-        completeButton.addActionListener(e -> {
-            int selectedRow = requestTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int requestId = (int) requestTable.getValueAt(selectedRow, 0);
-                completeRequest(requestId);
-            }
-        });
-
-        buttonsPanel.add(approveButton);
-        buttonsPanel.add(rejectButton);
-        buttonsPanel.add(completeButton);
+        addRequestPanelButtons(buttonsPanel);
         panel.add(buttonsPanel, BorderLayout.SOUTH);
 
         return new JScrollPane(panel);
     }
 
+    private void addRequestPanelButtons(JPanel buttonsPanel) {
+        JButton addButton = new JButton("Add Request");
+        JButton editButton = new JButton("Edit");
+        JButton deleteButton = new JButton("Delete");
+        styleButton(addButton);
+        styleButton(editButton);
+        styleButton(deleteButton);
+        editButton.setEnabled(false);
+        deleteButton.setEnabled(false);
+        requestTable.getSelectionModel().addListSelectionListener(e -> {
+            boolean rowSelected = requestTable.getSelectedRow() != -1;
+            editButton.setEnabled(rowSelected);
+            deleteButton.setEnabled(rowSelected);
+        });
+        addButton.addActionListener(e -> showRequestDialog(null));
+        editButton.addActionListener(e -> {
+            int selectedRow = requestTable.getSelectedRow();
+            if (selectedRow != -1) {
+                int requestId = (int) requestTable.getValueAt(selectedRow, 0);
+                showRequestDialog(requestDAO.getRequest(requestId));
+            }
+        });
+        deleteButton.addActionListener(e -> {
+            int selectedRow = requestTable.getSelectedRow();
+            if (selectedRow != -1) {
+                int requestId = (int) requestTable.getValueAt(selectedRow, 0);
+                deleteRequest(requestId);
+            }
+        });
+        buttonsPanel.add(addButton);
+        buttonsPanel.add(editButton);
+        buttonsPanel.add(deleteButton);
+    }
+
     private void loadRequestsData() {
         requestTableModel.setRowCount(0);
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT * FROM blood_requests ORDER BY request_date DESC")) {
-            
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                requestTableModel.addRow(new Object[]{
-                    rs.getInt("request_id"),
-                    rs.getString("requester_name"),
-                    rs.getString("blood_type"),
-                    rs.getInt("units_needed"),
-                    rs.getString("hospital_name"),
-                    rs.getString("priority"),
-                    rs.getString("status"),
-                    rs.getDate("required_by_date")
-                });
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error loading request data: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+        java.util.List<Request> requests = requestDAO.getAllRequests();
+        for (Request req : requests) {
+            requestTableModel.addRow(new Object[]{
+                req.getRequestId(),
+                req.getRequesterName(),
+                req.getBloodType(),
+                req.getUnitsNeeded(),
+                req.getHospitalName(),
+                req.getPriority(),
+                req.getStatus(),
+                req.getRequiredByDate()
+            });
         }
     }
 
@@ -1191,8 +1099,7 @@ public class AdminDashboard extends JFrame {
                     updateRequestStatus(requestId, "APPROVED");
                     // Reserve the blood units
                     reserveBloodUnits(bloodType, unitsNeeded);
-                    JOptionPane.showMessageDialog(this, "Request approved successfully!",
-                            "Success", JOptionPane.INFORMATION_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Request approved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                 } else {
                     JOptionPane.showMessageDialog(this,
                             "Not enough " + bloodType + " blood units available!\n" +
@@ -1203,8 +1110,7 @@ public class AdminDashboard extends JFrame {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error approving request: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error approving request: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1220,8 +1126,7 @@ public class AdminDashboard extends JFrame {
             stmt.executeUpdate();
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error reserving blood units: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error reserving blood units: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1234,8 +1139,7 @@ public class AdminDashboard extends JFrame {
 
         if (confirm == JOptionPane.YES_OPTION) {
             updateRequestStatus(requestId, "CANCELLED");
-            JOptionPane.showMessageDialog(this, "Request rejected successfully!",
-                    "Success", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Request rejected successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -1250,8 +1154,7 @@ public class AdminDashboard extends JFrame {
             updateRequestStatus(requestId, "COMPLETED");
             // Update the reserved blood units to disposed
             updateReservedBloodStatus(requestId);
-            JOptionPane.showMessageDialog(this, "Request marked as completed!",
-                    "Success", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Request marked as completed!", "Success", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -1266,8 +1169,7 @@ public class AdminDashboard extends JFrame {
             loadRequestsData(); // Refresh the table
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error updating request status: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error updating request status: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1282,8 +1184,7 @@ public class AdminDashboard extends JFrame {
             stmt.executeUpdate();
         } catch (Exception e) {
             e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error updating blood status: " + e.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error updating blood status: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1316,82 +1217,44 @@ public class AdminDashboard extends JFrame {
 
         // Buttons panel
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton approveButton = new JButton("Approve");
-        JButton rejectButton = new JButton("Reject");
-        JButton completeButton = new JButton("Mark as Completed");
-        JButton cancelButton = new JButton("Cancel");
-
-        // Style buttons
-        styleButton(approveButton);
-        styleButton(rejectButton);
-        styleButton(completeButton);
-        styleButton(cancelButton);
-
-        // Initially disable buttons
-        approveButton.setEnabled(false);
-        rejectButton.setEnabled(false);
-        completeButton.setEnabled(false);
-        cancelButton.setEnabled(false);
-
-        // Add table row selection listener
-        appointmentTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                int selectedRow = appointmentTable.getSelectedRow();
-                if (selectedRow != -1) {
-                    String status = (String) appointmentTable.getValueAt(selectedRow, 4);
-                    approveButton.setEnabled(status.equals("PENDING"));
-                    rejectButton.setEnabled(status.equals("PENDING"));
-                    completeButton.setEnabled(status.equals("APPROVED"));
-                    cancelButton.setEnabled(status.equals("PENDING") || status.equals("APPROVED"));
-                } else {
-                    approveButton.setEnabled(false);
-                    rejectButton.setEnabled(false);
-                    completeButton.setEnabled(false);
-                    cancelButton.setEnabled(false);
-                }
-            }
-        });
-
-        // Button actions
-        approveButton.addActionListener(e -> {
-            int selectedRow = appointmentTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int appointmentId = (int) appointmentTable.getValueAt(selectedRow, 0);
-                updateAppointmentStatus(appointmentId, "APPROVED");
-            }
-        });
-
-        rejectButton.addActionListener(e -> {
-            int selectedRow = appointmentTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int appointmentId = (int) appointmentTable.getValueAt(selectedRow, 0);
-                updateAppointmentStatus(appointmentId, "REJECTED");
-            }
-        });
-
-        completeButton.addActionListener(e -> {
-            int selectedRow = appointmentTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int appointmentId = (int) appointmentTable.getValueAt(selectedRow, 0);
-                updateAppointmentStatus(appointmentId, "COMPLETED");
-            }
-        });
-
-        cancelButton.addActionListener(e -> {
-            int selectedRow = appointmentTable.getSelectedRow();
-            if (selectedRow != -1) {
-                int appointmentId = (int) appointmentTable.getValueAt(selectedRow, 0);
-                updateAppointmentStatus(appointmentId, "CANCELLED");
-            }
-        });
-
-        buttonsPanel.add(approveButton);
-        buttonsPanel.add(rejectButton);
-        buttonsPanel.add(completeButton);
-        buttonsPanel.add(cancelButton);
+        addAppointmentPanelButtons(buttonsPanel);
         panel.add(buttonsPanel, BorderLayout.SOUTH);
 
         return new JScrollPane(panel);
+    }
+
+    private void addAppointmentPanelButtons(JPanel buttonsPanel) {
+        JButton addButton = new JButton("Add Appointment");
+        JButton editButton = new JButton("Edit");
+        JButton deleteButton = new JButton("Delete");
+        styleButton(addButton);
+        styleButton(editButton);
+        styleButton(deleteButton);
+        editButton.setEnabled(false);
+        deleteButton.setEnabled(false);
+        appointmentTable.getSelectionModel().addListSelectionListener(e -> {
+            boolean rowSelected = appointmentTable.getSelectedRow() != -1;
+            editButton.setEnabled(rowSelected);
+            deleteButton.setEnabled(rowSelected);
+        });
+        addButton.addActionListener(e -> showAppointmentDialog(null));
+        editButton.addActionListener(e -> {
+            int selectedRow = appointmentTable.getSelectedRow();
+            if (selectedRow != -1) {
+                int appointmentId = (int) appointmentTable.getValueAt(selectedRow, 0);
+                showAppointmentDialog(appointmentDAO.getAppointment(appointmentId));
+            }
+        });
+        deleteButton.addActionListener(e -> {
+            int selectedRow = appointmentTable.getSelectedRow();
+            if (selectedRow != -1) {
+                int appointmentId = (int) appointmentTable.getValueAt(selectedRow, 0);
+                deleteAppointment(appointmentId);
+            }
+        });
+        buttonsPanel.add(addButton);
+        buttonsPanel.add(editButton);
+        buttonsPanel.add(deleteButton);
     }
 
     private void updateAppointmentStatus(int appointmentId, String newStatus) {
@@ -1534,52 +1397,17 @@ public class AdminDashboard extends JFrame {
     }
 
     private void loadAppointmentsData() {
-        appointmentTableModel.setRowCount(0); // Clear existing data
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT a.*, CONCAT(d.first_name, ' ', d.last_name) as donor_name " +
-                     "FROM appointments a " +
-                     "JOIN donors d ON a.donor_id = d.donor_id " +
-                     "ORDER BY a.status = 'PENDING' DESC, " +  // Show pending first
-                     "a.appointment_date ASC, a.appointment_time ASC")) {
-            
-            ResultSet rs = stmt.executeQuery();
-            
-            SimpleDateFormat inputFormat = new SimpleDateFormat("HH:mm:ss");
-            SimpleDateFormat outputFormat = new SimpleDateFormat("hh:mm a");
-            
-            while (rs.next()) {
-                // Convert time from 24-hour to 12-hour format
-                String dbTime = rs.getString("appointment_time");
-                String displayTime = dbTime;
-                try {
-                    Date timeDate = inputFormat.parse(dbTime);
-                    displayTime = outputFormat.format(timeDate);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                
-                appointmentTableModel.addRow(new Object[]{
-                    rs.getInt("appointment_id"),
-                    rs.getString("donor_name"),
-                    rs.getDate("appointment_date"),
-                    displayTime,
-                    rs.getString("status"),
-                    rs.getString("notes")
-                });
-            }
-            
-            // Clear selection after refresh
-            appointmentTable.clearSelection();
-            
-            // Notify the table that data has changed
-            appointmentTableModel.fireTableDataChanged();
-        } catch (Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this,
-                "Error loading appointments: " + e.getMessage(),
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
+        appointmentTableModel.setRowCount(0);
+        java.util.List<Appointment> appointments = appointmentDAO.getAllAppointments();
+        for (Appointment appt : appointments) {
+            appointmentTableModel.addRow(new Object[]{
+                appt.getAppointmentId(),
+                appt.getDonorId(),
+                appt.getAppointmentDate(),
+                appt.getAppointmentTime(),
+                appt.getStatus(),
+                appt.getNotes()
+            });
         }
     }
 
@@ -1712,6 +1540,84 @@ public class AdminDashboard extends JFrame {
             optionPanel.add(configButton, BorderLayout.EAST);
 
             panel.add(optionPanel);
+        }
+    }
+
+    private void saveRequest(Integer requestId, String requesterName, String bloodType, int unitsNeeded, String hospitalName, String priority, String status, Date requiredByDate) {
+        Request req = new Request(
+            requestId != null ? requestId : 0,
+            requesterName,
+            bloodType,
+            unitsNeeded,
+            hospitalName,
+            priority,
+            status,
+            requiredByDate
+        );
+        boolean success = (requestId == null)
+            ? requestDAO.addRequest(req) > 0
+            : requestDAO.updateRequest(req);
+        if (success) {
+            JOptionPane.showMessageDialog(this, "Request saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            loadRequestsData();
+        } else {
+            JOptionPane.showMessageDialog(this, "Error saving request.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void deleteRequest(int requestId) {
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to delete this request?",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            boolean success = requestDAO.deleteRequest(requestId);
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Request deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                loadRequestsData();
+            } else {
+                JOptionPane.showMessageDialog(this, "Error deleting request.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void saveAppointment(Integer appointmentId, int donorId, Date date, String time, String status, String notes) {
+        Appointment appt = new Appointment(
+            appointmentId != null ? appointmentId : 0,
+            donorId,
+            date,
+            time,
+            status,
+            notes
+        );
+        boolean success = (appointmentId == null)
+            ? appointmentDAO.addAppointment(appt) > 0
+            : appointmentDAO.updateAppointment(appt);
+        if (success) {
+            JOptionPane.showMessageDialog(this, "Appointment saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            loadAppointmentsData();
+        } else {
+            JOptionPane.showMessageDialog(this, "Error saving appointment.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void deleteAppointment(int appointmentId) {
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to delete this appointment?",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            boolean success = appointmentDAO.deleteAppointment(appointmentId);
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Appointment deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                loadAppointmentsData();
+            } else {
+                JOptionPane.showMessageDialog(this, "Error deleting appointment.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 } 
