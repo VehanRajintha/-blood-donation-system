@@ -58,4 +58,9 @@ public class Donor {
     public void setEligible(boolean eligible) { isEligible = eligible; }
     public String getMedicalConditions() { return medicalConditions; }
     public void setMedicalConditions(String medicalConditions) { this.medicalConditions = medicalConditions; }
+
+    @Override
+    public String toString() {
+        return firstName + " " + lastName;
+    }
 } 

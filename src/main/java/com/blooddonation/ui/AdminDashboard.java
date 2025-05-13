@@ -33,6 +33,9 @@ import com.blooddonation.dao.AppointmentDAOImpl;
 import com.blooddonation.model.Appointment;
 
 public class AdminDashboard extends JFrame {
+    static {
+        System.out.println("[DEBUG] AdminDashboard class loaded");
+    }
     private JPanel mainPanel;
     private JPanel menuPanel;
     private JPanel contentPanel;
@@ -49,7 +52,7 @@ public class AdminDashboard extends JFrame {
     private DefaultTableModel appointmentTableModel;
     private JTable appointmentTable;
     private String currentPage = "Dashboard";
-    private DonorDAO donorDAO;
+    private DonorDAO donorDAO = new DonorDAOImpl();
     private RequestDAO requestDAO = new RequestDAOImpl();
     private AppointmentDAO appointmentDAO = new AppointmentDAOImpl();
 
@@ -58,6 +61,8 @@ public class AdminDashboard extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1200, 700);
         setLocationRelativeTo(null);
+
+        System.out.println("[DEBUG] donorDAO in constructor: " + donorDAO);
 
         // Main panel setup
         mainPanel = new JPanel(new BorderLayout());
@@ -78,8 +83,6 @@ public class AdminDashboard extends JFrame {
 
         // Start menu animation
         startMenuAnimation();
-
-        donorDAO = new DonorDAOImpl(); // Demonstrates abstraction/polymorphism
     }
 
     private void setupMenuPanel() {
@@ -488,6 +491,12 @@ public class AdminDashboard extends JFrame {
     }
 
     private void loadDonorData() {
+        System.out.println("[DEBUG] donorDAO in loadDonorData: " + donorDAO);
+        if (donorDAO == null) {
+            System.err.println("[ERROR] donorDAO is null in loadDonorData!");
+            new Exception().printStackTrace();
+            return;
+        }
         donorTableModel.setRowCount(0);
         java.util.List<Donor> donors = donorDAO.getAllDonors();
         for (Donor d : donors) {
@@ -1592,9 +1601,18 @@ public class AdminDashboard extends JFrame {
             status,
             notes
         );
-        boolean success = (appointmentId == null)
-            ? appointmentDAO.addAppointment(appt) > 0
-            : appointmentDAO.updateAppointment(appt);
+        boolean success = false;
+        try {
+            if (appointmentId == null) {
+                success = appointmentDAO.addAppointment(appt) > 0;
+            } else {
+                success = appointmentDAO.updateAppointment(appt);
+            }
+        } catch (Exception e) {
+            e.printStackTrace(); // Print the real error
+            JOptionPane.showMessageDialog(this, "Error saving appointment: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         if (success) {
             JOptionPane.showMessageDialog(this, "Appointment saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
             loadAppointmentsData();
@@ -1619,5 +1637,257 @@ public class AdminDashboard extends JFrame {
                 JOptionPane.showMessageDialog(this, "Error deleting appointment.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
+    }
+
+    private void showRequestDialog(Request request) {
+        JDialog dialog = new JDialog(this, request == null ? "Add New Request" : "Edit Request", true);
+        dialog.setLayout(new BorderLayout(10, 10));
+        dialog.setSize(500, 600);
+        dialog.setLocationRelativeTo(this);
+
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Form fields
+        JTextField requesterNameField = new JTextField(20);
+        JComboBox<String> bloodTypeCombo = new JComboBox<>(new String[]{"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"});
+        JSpinner unitsSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 100, 1));
+        JTextField hospitalField = new JTextField(20);
+        JComboBox<String> priorityCombo = new JComboBox<>(new String[]{"LOW", "MEDIUM", "HIGH", "URGENT"});
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{"PENDING", "APPROVED", "REJECTED", "COMPLETED", "CANCELLED"});
+        JDateChooser requiredByChooser = new JDateChooser();
+
+        // Set default values if editing
+        if (request != null) {
+            requesterNameField.setText(request.getRequesterName());
+            bloodTypeCombo.setSelectedItem(request.getBloodType());
+            unitsSpinner.setValue(request.getUnitsNeeded());
+            hospitalField.setText(request.getHospitalName());
+            priorityCombo.setSelectedItem(request.getPriority());
+            statusCombo.setSelectedItem(request.getStatus());
+            requiredByChooser.setDate(request.getRequiredByDate());
+        }
+
+        // Add components to form
+        gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("Requester Name:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(requesterNameField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1;
+        formPanel.add(new JLabel("Blood Type:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(bloodTypeCombo, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2;
+        formPanel.add(new JLabel("Units Needed:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(unitsSpinner, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 3;
+        formPanel.add(new JLabel("Hospital:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(hospitalField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("Priority:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(priorityCombo, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 5;
+        formPanel.add(new JLabel("Status:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(statusCombo, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 6;
+        formPanel.add(new JLabel("Required By:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(requiredByChooser, gbc);
+
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton saveButton = new JButton("Save");
+        JButton cancelButton = new JButton("Cancel");
+
+        styleButton(saveButton);
+        styleButton(cancelButton);
+
+        saveButton.addActionListener(e -> {
+            if (validateRequestForm(requesterNameField, hospitalField)) {
+                saveRequest(
+                    request != null ? request.getRequestId() : null,
+                    requesterNameField.getText().trim(),
+                    (String) bloodTypeCombo.getSelectedItem(),
+                    (Integer) unitsSpinner.getValue(),
+                    hospitalField.getText().trim(),
+                    (String) priorityCombo.getSelectedItem(),
+                    (String) statusCombo.getSelectedItem(),
+                    requiredByChooser.getDate()
+                );
+                dialog.dispose();
+            }
+        });
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+
+        buttonPanel.add(saveButton);
+        buttonPanel.add(cancelButton);
+
+        dialog.add(new JScrollPane(formPanel), BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
+    private boolean validateRequestForm(JTextField requesterNameField, JTextField hospitalField) {
+        if (requesterNameField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Requester name is required", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        if (hospitalField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Hospital name is required", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+
+    private void showAppointmentDialog(Appointment appointment) {
+        JDialog dialog = new JDialog(this, appointment == null ? "Add New Appointment" : "Edit Appointment", true);
+        dialog.setLayout(new BorderLayout(10, 10));
+        dialog.setSize(500, 600);
+        dialog.setLocationRelativeTo(this);
+
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Form fields
+        JComboBox<Donor> donorCombo = new JComboBox<>();
+        JDateChooser dateChooser = new JDateChooser();
+        JComboBox<String> timeCombo = new JComboBox<>(new String[]{
+            "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
+            "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM"
+        });
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{
+            "SCHEDULED", "APPROVED", "COMPLETED", "CANCELLED", "REJECTED"
+        });
+        JTextArea notesArea = new JTextArea(3, 20);
+
+        // Load donors into combo box
+        java.util.List<Donor> donors = donorDAO.getAllDonors();
+        for (Donor donor : donors) {
+            donorCombo.addItem(donor);
+        }
+
+        // Set default values if editing
+        if (appointment != null) {
+            for (int i = 0; i < donorCombo.getItemCount(); i++) {
+                if (donorCombo.getItemAt(i).getDonorId() == appointment.getDonorId()) {
+                    donorCombo.setSelectedIndex(i);
+                    break;
+                }
+            }
+            dateChooser.setDate(appointment.getAppointmentDate());
+            
+            // Convert 24-hour time to 12-hour format for display
+            SimpleDateFormat inputFormat = new SimpleDateFormat("HH:mm:ss");
+            SimpleDateFormat outputFormat = new SimpleDateFormat("hh:mm a");
+            try {
+                Date timeDate = inputFormat.parse(appointment.getAppointmentTime());
+                String displayTime = outputFormat.format(timeDate);
+                timeCombo.setSelectedItem(displayTime);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            
+            statusCombo.setSelectedItem(appointment.getStatus());
+            notesArea.setText(appointment.getNotes());
+        }
+
+        // Add components to form
+        gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("Donor:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(donorCombo, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1;
+        formPanel.add(new JLabel("Date:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(dateChooser, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2;
+        formPanel.add(new JLabel("Time:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(timeCombo, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 3;
+        formPanel.add(new JLabel("Status:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(statusCombo, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("Notes:"), gbc);
+        gbc.gridx = 1;
+        formPanel.add(new JScrollPane(notesArea), gbc);
+
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton saveButton = new JButton("Save");
+        JButton cancelButton = new JButton("Cancel");
+
+        styleButton(saveButton);
+        styleButton(cancelButton);
+
+        saveButton.addActionListener(e -> {
+            if (validateAppointmentForm(donorCombo, dateChooser)) {
+                Donor selectedDonor = (Donor) donorCombo.getSelectedItem();
+                // Convert 24-hour time to 12-hour format
+                String time12 = (String) timeCombo.getSelectedItem();
+                String time24 = "";
+                try {
+                    java.text.SimpleDateFormat inputFormat = new java.text.SimpleDateFormat("HH:mm:ss");
+                    java.text.SimpleDateFormat outputFormat = new java.text.SimpleDateFormat("hh:mm a");
+                    java.util.Date parsedTime = inputFormat.parse(time12);
+                    time24 = outputFormat.format(parsedTime);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    time24 = "09:00:00"; // fallback
+                }
+                saveAppointment(
+                    appointment != null ? appointment.getAppointmentId() : null,
+                    selectedDonor.getDonorId(),
+                    dateChooser.getDate(),
+                    time24,
+                    (String) statusCombo.getSelectedItem(),
+                    notesArea.getText().trim()
+                );
+                dialog.dispose();
+            }
+        });
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+
+        buttonPanel.add(saveButton);
+        buttonPanel.add(cancelButton);
+
+        dialog.add(new JScrollPane(formPanel), BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
+    private boolean validateAppointmentForm(JComboBox<Donor> donorCombo, JDateChooser dateChooser) {
+        if (donorCombo.getSelectedItem() == null) {
+            JOptionPane.showMessageDialog(this, "Please select a donor", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        if (dateChooser.getDate() == null) {
+            JOptionPane.showMessageDialog(this, "Please select a date", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        return true;
     }
 } 

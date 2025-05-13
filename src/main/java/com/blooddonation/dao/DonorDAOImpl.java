@@ -37,23 +37,22 @@ public class DonorDAOImpl implements DonorDAO {
     }
 
     @Override
-    public boolean updateDonor(Object donor) {
+    public boolean updateDonor(Donor donor) {
         try (java.sql.Connection conn = com.blooddonation.util.DatabaseConnection.getConnection();
              java.sql.PreparedStatement stmt = conn.prepareStatement(
                 "UPDATE donors SET first_name=?, last_name=?, blood_type=?, gender=?, phone=?, email=?, address=?, date_of_birth=?, last_donation_date=?, is_eligible=?, medical_conditions=? WHERE donor_id=?")) {
-            java.util.Vector<?> d = (java.util.Vector<?>) donor;
-            stmt.setString(1, (String) d.get(1)); // firstName
-            stmt.setString(2, (String) d.get(2)); // lastName
-            stmt.setString(3, (String) d.get(3)); // bloodType
-            stmt.setString(4, (String) d.get(4)); // gender
-            stmt.setString(5, (String) d.get(5)); // phone
-            stmt.setString(6, (String) d.get(6)); // email
-            stmt.setString(7, (String) d.get(7)); // address
-            stmt.setDate(8, new java.sql.Date(((java.util.Date) d.get(8)).getTime())); // dob
-            stmt.setDate(9, d.get(9) != null ? new java.sql.Date(((java.util.Date) d.get(9)).getTime()) : null); // lastDonation
-            stmt.setBoolean(10, (Boolean) d.get(10)); // isEligible
-            stmt.setString(11, (String) d.get(11)); // medicalConditions
-            stmt.setInt(12, (Integer) d.get(0)); // donorId
+            stmt.setString(1, donor.getFirstName());
+            stmt.setString(2, donor.getLastName());
+            stmt.setString(3, donor.getBloodType());
+            stmt.setString(4, donor.getGender());
+            stmt.setString(5, donor.getPhone());
+            stmt.setString(6, donor.getEmail());
+            stmt.setString(7, donor.getAddress());
+            stmt.setDate(8, new java.sql.Date(donor.getDateOfBirth().getTime()));
+            stmt.setDate(9, donor.getLastDonationDate() != null ? new java.sql.Date(donor.getLastDonationDate().getTime()) : null);
+            stmt.setBoolean(10, donor.isEligible());
+            stmt.setString(11, donor.getMedicalConditions());
+            stmt.setInt(12, donor.getDonorId());
 
             int affectedRows = stmt.executeUpdate();
             return affectedRows > 0;
@@ -105,26 +104,27 @@ public class DonorDAOImpl implements DonorDAO {
     }
 
     @Override
-    public java.util.List<Object> getAllDonors() {
-        java.util.List<Object> donors = new java.util.ArrayList<>();
+    public java.util.List<Donor> getAllDonors() {
+        java.util.List<Donor> donors = new java.util.ArrayList<>();
         try (java.sql.Connection conn = com.blooddonation.util.DatabaseConnection.getConnection();
              java.sql.PreparedStatement stmt = conn.prepareStatement("SELECT * FROM donors")) {
             java.sql.ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
-                java.util.Vector<Object> donorData = new java.util.Vector<>();
-                donorData.add(rs.getInt("donor_id"));
-                donorData.add(rs.getString("first_name"));
-                donorData.add(rs.getString("last_name"));
-                donorData.add(rs.getString("blood_type"));
-                donorData.add(rs.getString("gender"));
-                donorData.add(rs.getString("phone"));
-                donorData.add(rs.getString("email"));
-                donorData.add(rs.getString("address"));
-                donorData.add(rs.getDate("date_of_birth"));
-                donorData.add(rs.getDate("last_donation_date"));
-                donorData.add(rs.getBoolean("is_eligible"));
-                donorData.add(rs.getString("medical_conditions"));
-                donors.add(donorData);
+                Donor donor = new Donor(
+                    rs.getInt("donor_id"),
+                    rs.getString("first_name"),
+                    rs.getString("last_name"),
+                    rs.getString("blood_type"),
+                    rs.getString("gender"),
+                    rs.getString("phone"),
+                    rs.getString("email"),
+                    rs.getString("address"),
+                    rs.getDate("date_of_birth"),
+                    rs.getDate("last_donation_date"),
+                    rs.getBoolean("is_eligible"),
+                    rs.getString("medical_conditions")
+                );
+                donors.add(donor);
             }
         } catch (Exception e) {
             e.printStackTrace();
